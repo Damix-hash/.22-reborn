@@ -7,12 +7,20 @@ let startTime = Date.now();
 const spam_count = {};
 const temp_blacklist = new Map();
 const spam_offenses = {};
-const tpsBuffer = []
+const tpsBuffer = [];
 
 const MAX_BUFFER = 20;
-// create a a file named .env in the root directory of your project and add a WHITELIST variable with comma-separated usernames
-// for example: WHITELIST=user1,user2,user3
+
+// Whitelist from .env
 const whitelist = process.env.WHITELIST ? process.env.WHITELIST.split(',').map(u => u.trim()) : [];
+
+// Hardcoded admin list inside repo
+const adminList = ['Damix2131', 'RepoAdmin2', 'anotherAdmin']; // Add your admin usernames here
+
+function isAdmin(user) {
+  user = user.trim();
+  return whitelist.includes(user) || adminList.includes(user);
+}
 
 async function fetchJD(user, state) {
     const response = await fetch(`https://www.6b6t.org/pl/stats/${user}`);
@@ -97,142 +105,18 @@ function saveBotData(state) {
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
 
     const filePath = path.join(outputDir, 'bot_data.json');
-    //console.log('[Bot] About to save bot data');
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 
     console.log(`[Bot] Saved Data!`);
-    //console.log(`[Bot] outputDir ${outputDir}`)
-    //console.log('[Bot] __dirname is:', __dirname);
   } catch (err) {
     console.error('[Bot] Error saving bot_data.json:', err);
   }
 }
 
-
 function startAutoSave(state, intervalMs = 2 * 60 * 1000) {
-  setInterval(() => saveBotData(state), intervalMs);
-
-  process.on('SIGINT', () => {
+  setInterval(() => {
     saveBotData(state);
-    process.exit();
-  });
-  process.on('SIGTERM', () => {
-    saveBotData(state);
-    process.exit();
-  });
-}
-
-function get_uptime() {
-  const now = Date.now();
-  const uptime = now - startTime;
-
-  const totalSeconds = Math.floor(uptime / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  return `${hours}h ${minutes}m ${seconds}s`;
-}
-
-function random_element(arr) {
-  return String(arr[Math.floor(Math.random() * arr.length)]);
-}
-
-function createRandomString() {
-    const length = 5;
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let result = "";
-
-    for (let i = 0; i < length; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-}
-
-function safeChat(msg) {
-    return `${msg} ${createRandomString()}`;
-}
-
-function get_random_ip() {
-  const array = [];
-  for (let i = 0; i < 4; i++) {
-    array.push(Math.floor(Math.random() * 256));
-  }
-  const [a, b, c, d] = array;
-  return `${a}.${b}.${c}.${d}`;
-}
-
-function getIndefiniteArticle(word) {
-  if (!word) return '';
-  return /^[aeiou]/i.test(word) ? 'an' : 'a';
-}
-
-function handlePercentCmd(user, prefix, message, bot, state, options = {}) {
-  const [fullCmd, ...args] = message.trim().split(/\s+/);
-  const cmd = fullCmd.replace(prefix, '').toLowerCase();
-
-  let target = args[0] || user;
-
-  if (target.toLowerCase && target.toLowerCase() === 'random') {
-    const players = Object.keys(bot.players);
-    target = players.length > 0 ? state.random_element(players) : user;
-  }
-
-  if (options.status) {
-    return state.safeChat(`${target} is ${options.status}`);
-  }
-
-  if (options.customMessage) {
-    return state.safeChat(options.customMessage(target, cmd, args.slice(1)));
-  }
-
-  let value = Math.floor(Math.random() * 101);
-  if (options.isRating) {
-    value = Math.floor(Math.random() * 10) + 1;
-  }
-
-  let article = '';
-  if (options.useArticle) {
-    article = getIndefiniteArticle(cmd) + ' ';
-  }
-
-  return state.safeChat(`${target} is ${article}${value}% ${cmd}`);
-}
-
-
-function handleTargetCommand(user, prefix, message, bot, state, label, usage, chatMessageFn) {
-  const rawArgs = message.split(`${prefix}${label} `)[1];
-  const args = rawArgs ? rawArgs.trim().split(/\s+/) : [];
-
-  let target = args[0];
-
-  if (target && target.toLowerCase() === 'random') {
-    const players = Object.keys(bot.players);
-    target = state.random_element(players);
-  }
-
-  if (!target || target.trim().length === 0) {
-    return bot.chat(state.safeChat(`Usage: ${prefix}${label} ${usage}`));
-  }
-
-  const msg = chatMessageFn(user, target, args.slice(1));
-  return bot.chat(state.safeChat(msg));
-}
-
-
-function get_kd(target, state) {
-  const hasKills = state.crystal_kills.hasOwnProperty(target);
-  const hasDeaths = state.crystal_deaths.hasOwnProperty(target);
-
-  if (hasKills || hasDeaths) {
-    const kills = state.crystal_kills[target] || 0;
-    const deaths = state.crystal_deaths[target] || 0;
-    const kd = deaths === 0 ? kills : (kills / deaths).toFixed(2);
-
-    return `${target} has ${kills} kill${kills !== 1 ? 's' : ''} and ${deaths} death${deaths !== 1 ? 's' : ''}. KD: ${kd}`
-  } else {
-    return `Player ${target} has no recorded kills or deaths.`
-  }
+  }, intervalMs);
 }
 
 function return_user(msg) {
@@ -251,6 +135,7 @@ function return_user(msg) {
   return get_username?.trim() || '';
 }
 
+// Legacy: keep this for compatibility if needed
 function whitelisted_users(user) {
   return whitelist.includes(user.trim());
 }
@@ -298,27 +183,20 @@ function checkSpam(bot, user) {
 }
 
 module.exports = {
-  get_uptime,
-  random_element,
-  get_random_ip,
-  return_user,
-  whitelisted_users,
-  blacklist,
-  checkSpam,
-  get_kd,
-  safeChat,
-  handlePercentCmd,
-  handleTargetCommand,
-  saveBotData,
-  startAutoSave,
-  loadBotData,
+  fetchJD,
   getCurrentTPS,
   getCurrentTPSInstant,
   getServerTPS,
-  fetchJD,
+  loadBotData,
+  saveBotData,
+  startAutoSave,
+  return_user,
+  whitelisted_users, // legacy function, still works
+  isAdmin,
   spam_count,
   temp_blacklist,
   spam_offenses,
   whitelist,
+  adminList,
+  checkSpam,
 };
-
